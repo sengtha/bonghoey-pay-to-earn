@@ -2,37 +2,57 @@ import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 
 function App() {
-  const [view, setView] = useState('customer'); // 'customer' or 'admin'
+  const [view, setView] = useState('login'); 
   const [phone, setPhone] = useState('');
-  const [message, setMessage] = useState('');
+  const [pin, setPin] = useState('');
   const [points, setPoints] = useState(0);
-  
-  // Admin States
+  const [message, setMessage] = useState('');
   const [gifts, setGifts] = useState([]);
-  const [newGiftName, setNewGiftName] = useState('');
-  const [newGiftStock, setNewGiftStock] = useState('');
 
-  const checkBalance = async () => {
-    setMessage("Checking...");
+  // Check URL for Magic Link
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('setup') === 'true') {
+      setPhone(params.get('phone') || '');
+      setView('setup');
+    }
+  }, []);
+
+  const handleSetup = async () => {
+    setMessage("Saving PIN...");
     const res = await fetch('/api/rewards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'check_balance', phone_number: phone })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setup_pin', phone_number: phone, pin })
+    });
+    if (res.ok) {
+      setMessage("PIN Set! Logging in...");
+      handleLogin();
+    }
+  };
+
+  const handleLogin = async () => {
+    setMessage("Logging in...");
+    const res = await fetch('/api/rewards', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'login', phone_number: phone, pin })
     });
     const data = await res.json();
-    setPoints(data.points || 0);
-    setMessage(data.error ? data.error : "Balance loaded.");
+    if (data.error) {
+      setMessage(data.error);
+    } else {
+      setPoints(data.points);
+      setView('dashboard');
+      setMessage('');
+    }
   };
 
   const handleRedeem = async () => {
-    setMessage("Spinning the wheel...");
+    setMessage("Spinning...");
     const res = await fetch('/api/rewards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'redeem', phone_number: phone })
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'redeem', phone_number: phone, pin })
     });
     const data = await res.json();
-    
     if (data.error) setMessage(data.error);
     else {
       setMessage(`🎉 You won: ${data.reward_won}!`);
@@ -40,76 +60,66 @@ function App() {
     }
   };
 
-  const loadGifts = async () => {
+  const loadAdmin = async () => {
     const res = await fetch('/api/rewards');
     setGifts(await res.json());
+    setView('admin');
   };
 
-  const handleAddGift = async () => {
-    await fetch('/api/rewards', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action: 'add_gift', name: newGiftName, inventory: Number(newGiftStock) })
-    });
-    setNewGiftName('');
-    setNewGiftStock('');
-    loadGifts(); 
-  };
-
-  useEffect(() => {
-    if (view === 'admin') loadGifts();
-  }, [view]);
+  const inputStyle = { width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' };
+  const btnStyle = { width: '100%', padding: '12px', color: 'white', border: 'none', fontWeight: 'bold', marginBottom: '10px' };
 
   return (
-    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '500px', margin: '0 auto' }}>
-      <div style={{ display: 'flex', gap: '10px', marginBottom: '20px' }}>
-        <button onClick={() => setView('customer')} style={{ flex: 1, padding: '10px' }}>Customer</button>
-        <button onClick={() => setView('admin')} style={{ flex: 1, padding: '10px' }}>Admin</button>
-      </div>
-
-      {view === 'customer' ? (
-        <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
-          <h2>🎁 Pay-to-Earn Rewards</h2>
-          <p style={{ fontSize: '12px', color: '#666' }}>Pay via BongHoey KHQR and put your phone number in the Note.</p>
-          
-          <input 
-            placeholder="Enter Phone Number" 
-            value={phone} 
-            onChange={(e) => setPhone(e.target.value)} 
-            style={{ width: '100%', padding: '10px', marginBottom: '10px', boxSizing: 'border-box' }}
-          />
-          <button onClick={checkBalance} style={{ width: '100%', padding: '10px', background: '#3b82f6', color: 'white', border: 'none', marginBottom: '10px' }}>
-            Check Balance
-          </button>
-
-          <div style={{ background: '#f3f4f6', padding: '15px', textAlign: 'center', marginBottom: '10px' }}>
-            <h3>Your Points: {points}</h3>
-          </div>
-
-          <button onClick={handleRedeem} style={{ width: '100%', padding: '15px', background: '#10b981', color: 'white', border: 'none', fontSize: '16px', fontWeight: 'bold' }}>
-            Play & Redeem (10 pts)
-          </button>
-          
-          <p style={{ marginTop: '15px', color: '#eab308', fontWeight: 'bold', textAlign: 'center' }}>{message}</p>
+    <div style={{ padding: '20px', fontFamily: 'sans-serif', maxWidth: '400px', margin: '0 auto' }}>
+      
+      {view === 'setup' && (
+        <div>
+          <h2>Secure Your Wallet</h2>
+          <p>Welcome! Set a 4-digit PIN to secure your points.</p>
+          <input placeholder="Phone" value={phone} readOnly style={inputStyle}/>
+          <input placeholder="Create 4-Digit PIN" type="password" value={pin} onChange={e => setPin(e.target.value)} style={inputStyle}/>
+          <button onClick={handleSetup} style={{...btnStyle, background: '#10b981'}}>Save PIN & Enter</button>
         </div>
-      ) : (
-        <div style={{ border: '1px solid #ccc', padding: '15px', borderRadius: '8px' }}>
-          <h2>🏬 Shop Inventory</h2>
-          <div style={{ marginBottom: '20px' }}>
-            <input placeholder="Gift Name" value={newGiftName} onChange={e => setNewGiftName(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '5px', boxSizing: 'border-box' }}/>
-            <input placeholder="Stock Qty" type="number" value={newGiftStock} onChange={e => setNewGiftStock(e.target.value)} style={{ width: '100%', padding: '8px', marginBottom: '10px', boxSizing: 'border-box' }}/>
-            <button onClick={handleAddGift} style={{ width: '100%', padding: '10px', background: '#8b5cf6', color: 'white', border: 'none' }}>+ Add Gift</button>
+      )}
+
+      {view === 'login' && (
+        <div>
+          <h2>User Login</h2>
+          <input placeholder="Phone Number" value={phone} onChange={e => setPhone(e.target.value)} style={inputStyle}/>
+          <input placeholder="4-Digit PIN" type="password" value={pin} onChange={e => setPin(e.target.value)} style={inputStyle}/>
+          <button onClick={handleLogin} style={{...btnStyle, background: '#3b82f6'}}>Login</button>
+          <button onClick={loadAdmin} style={{...btnStyle, background: '#6b7280', marginTop: '20px'}}>Shop Admin Login</button>
+          <p style={{color: 'red'}}>{message}</p>
+        </div>
+      )}
+
+      {view === 'dashboard' && (
+        <div>
+          <h2>My Rewards Wallet</h2>
+          <div style={{ background: '#f3f4f6', padding: '20px', textAlign: 'center', marginBottom: '15px' }}>
+            <h1>{points} pts</h1>
           </div>
+          <button onClick={handleRedeem} style={{...btnStyle, background: '#8b5cf6'}}>Play Lucky Draw (10 pts)</button>
+          <button onClick={() => setView('login')} style={{...btnStyle, background: '#ef4444'}}>Logout</button>
+          <p style={{color: '#eab308', fontWeight: 'bold'}}>{message}</p>
+        </div>
+      )}
+
+      {view === 'admin' && (
+        <div>
+          <h2>Shop Admin Dashboard</h2>
+          <p style={{fontSize: '12px', color: 'red'}}>*Ensure Cloudflare Zero Trust is protecting this view.*</p>
           <ul style={{ listStyle: 'none', padding: 0 }}>
             {gifts.map(g => (
-              <li key={g.id} style={{ display: 'flex', justifyContent: 'space-between', padding: '10px', borderBottom: '1px solid #eee' }}>
-                <span>{g.name}</span>
-                <span style={{ fontWeight: 'bold', color: g.inventory > 0 ? '#10b981' : '#ef4444' }}>Stock: {g.inventory}</span>
+              <li key={g.id} style={{ padding: '10px', borderBottom: '1px solid #eee', display: 'flex', justifyContent: 'space-between' }}>
+                <span>{g.name}</span> <strong>{g.inventory} left</strong>
               </li>
             ))}
           </ul>
+          <button onClick={() => setView('login')} style={{...btnStyle, background: '#6b7280'}}>Exit Admin</button>
         </div>
       )}
+
     </div>
   );
 }
